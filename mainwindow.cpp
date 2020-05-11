@@ -23,7 +23,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->groupBox_flow->setEnabled(false);
 
     //固定窗口大小，禁止拖拉
-    this->setFixedSize(496,696);
+    this->setFixedSize(490,620);
 
     // 得到按钮的初始背景色
     QPalette pal = ui->btn_local->palette();
@@ -47,7 +47,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     //输出当前系统可以使用的串口个数
     QString temp = "Total numbers of ports: " + QString::number(serialPortInfos.count());
-    ui->textEdit_send->append(temp);
+    ui->textEdit_msg->append(temp);
 
     for (const QSerialPortInfo &serialPortInfo : serialPortInfos)
     {
@@ -70,7 +70,7 @@ MainWindow::MainWindow(QWidget *parent) :
         {
             msg.append(list.at(i) + " ");
         }
-        ui->textEdit_send->append("PORT: " + msg);
+        ui->textEdit_msg->append("PORT: " + msg);
     }
 
     // 系统无可用串口
@@ -153,11 +153,98 @@ void MainWindow::on_btn_openPort_clicked()
             ivSetFlowTimer.stop();
         }
 
+        ui->textEdit_msg->append("\n关闭电流：");
+        QString flowOn = "7E02010100";
+        writeData(flowOn);
+
+        // 判断关闭电流开关返回帧
+        QString data = readData();
+        if(data=="")
+        {
+            ui->textEdit_msg->append("无法关闭电流开关，无返回帧 7F02010100.");
+        }
+        else
+        {
+            // 去除内部所有空格，匹配返回帧协议
+            data.remove(QRegExp("\\s"));
+            if(data == "7F02010100")
+            {
+                ui->textEdit_msg->append("关闭电流开关返回帧正确 7F02010100.");
+            }
+            else
+            {
+                std::string msg = "关闭电流开关返回帧错误, 返回帧应为 7F02010100. 实际返回值为 ";
+                msg.append(data.toStdString());
+                ui->textEdit_msg->append(QString::fromStdString(msg));
+            }
+        }
+
+        // 设置电流
+        ui->textEdit_msg->append("\n设置电流值：0 ");
+        QString flowValue = "7E0401020000";
+        writeData(flowValue);
+
+        // 判断设置电流返回帧
+        data = readData();
+        if(data=="")
+        {
+            ui->textEdit_msg->append("无法设置电流，无返回帧 7F040102YY.");
+        }
+        else
+        {
+            // 去除内部所有空格，匹配返回帧协议
+            QString returnStr = "7F0401020000";
+            data.remove(QRegExp("\\s"));
+            if(data == returnStr)
+            {
+                ui->textEdit_msg->append("设置电流返回帧正确 " + returnStr);
+            }
+            else
+            {
+                ui->textEdit_msg->append("设置电流返回帧错误，返回帧应为 " + returnStr);
+            }
+        }
+
+        // 查询电流值
+        ui->textEdit_msg->append("\n查询电流值: ");
+        QString getFlowValue = "7E51010100";
+        writeData(getFlowValue);
+
+        // 判断返回帧
+        data = readData();
+        if( data=="" )
+        {
+            ui->textEdit_msg->append("无法查询电流值，无返回帧 7F510102YY.");
+        }
+        else
+        {
+            // 去除内部所有空格，匹配返回帧协议
+            data.remove(QRegExp("\\s"));
+            if(data.left(8) == "7F510102")
+            {
+                std::string msg = "查询电流值返回帧正确 ";
+                msg.append(data.toStdString());
+                ui->textEdit_msg->append(QString::fromStdString(msg));
+
+                // 取得后四位的电流值，实时显示在显示框
+                int value = QString2Int(data.mid(8,4));
+                ui->lineEdit_flowValue->setText(QString::number(value));
+            }
+            else
+            {
+                std::string msg = "查询电流值返回帧错误，返回帧应为 7F510102YY. 实际返回值 ";
+                msg.append(data.toStdString());
+                ui->textEdit_msg->append(QString::fromStdString(msg));
+            }
+        }
+
         ivSerial->close();
 
         ui->comboBox_serialPort->setEnabled(true);
         ui->btn_openPort->setText("打开端口");
         ui->groupBox_controlMode->setEnabled(false);
+        ui->btn_local->setEnabled(false);
+        ui->btn_rs232->setEnabled(false);
         ui->groupBox_flow->setEnabled(false);
         return;
     }
@@ -167,7 +254,7 @@ void MainWindow::on_btn_openPort_clicked()
     if( ivPortName == "" )
     {
         QString msg = "Not found any port, please check the environment or the comboBox contnet.";
-        ui->textEdit_send->append(msg);
+        ui->textEdit_msg->append(msg);
         return;
     }
 
@@ -193,16 +280,18 @@ void MainWindow::on_btn_openPort_clicked()
     if (ivSerial->open(QIODevice::ReadWrite))
     {
         //信号与槽函数关联
-        connect(ivSerial, &QSerialPort::readyRead, this, &MainWindow::readData);
+        //connect(ivSerial, &QSerialPort::readyRead, this, &MainWindow::readData);
     }
     else
     {
         QString msg = "\n Can not open port " + ivPortName + ", please check the environment.\n";
-        ui->textEdit_send->append(msg);
+        ui->textEdit_msg->append(msg);
         return;
     }
 
     ui->groupBox_controlMode->setEnabled(true);
+    ui->btn_local->setEnabled(true);
+    ui->btn_rs232->setEnabled(true);
     ui->groupBox_flow->setEnabled(true);
     ui->comboBox_serialPort->setEnabled(false);
     ui->btn_openPort->setText("关闭端口");
@@ -210,16 +299,37 @@ void MainWindow::on_btn_openPort_clicked()
     QString temp = "打开串口" + ivPortName \
                   + " 波特率:" + QString::number(QSerialPort::Baud9600) + " 停止位:OneStop" \
                   + " 数据位:" + QString::number(QSerialPort::Data8) + " 校验位:NoParity";
-    ui->textEdit_send->append(temp);
+    ui->textEdit_msg->append(temp);
 
     connect(&ivGetFlowTimer, &QTimer::timeout, this, &MainWindow::handleGetFlowTimeout);
-    ivGetFlowTimer.start(1000);
 
     // 设置工作模式为连续模式 判断返回帧的值
-    ui->textEdit_send->append("\n设置工作模式为连续模式：");
+    ui->textEdit_msg->append("\n设置工作模式为连续模式：");
     QString workMode = "7E01010101";
     writeData(workMode);
 
+    // 判断返回帧
+    QString data = readData();
+    if( data=="" )
+    {
+        ui->textEdit_msg->append("设置工作模式为连续模式，无返回帧 7F01010101.");
+        // 开启查询定时器
+        ivGetFlowTimer.start(1000);
+        return;
+    }
+    // 去除内部所有空格，匹配返回帧协议
+    data.remove(QRegExp("\\s"));
+    if(data == "7F01010101")
+    {
+        ui->textEdit_msg->append("设置工作模式返回帧正确 7F01010101.");
+    }
+    else
+    {
+        ui->textEdit_msg->append("设置工作模式返回帧错误, 返回帧应为 7F01010101.");
+    }
+
+    // 开启查询定时器
+    ivGetFlowTimer.start(1000);
     return;
 }
 
@@ -228,16 +338,50 @@ void MainWindow::handleGetFlowTimeout()
     ui->lineEdit_flowValue->clear();
 
     // 设置第一次和每5次(5s)打印日志消息
+    bool bDisp = false;
     ivGetFlowDisplayCount++;
     //if( ivGetFlowDisplayCount == 1 || ivGetFlowDisplayCount%5==0)
     {
-        ui->textEdit_send->append("\n查询电流值：");
+        ui->textEdit_msg->append("\n查询电流值：");
         bDisp = true;
     }
 
     // 查询电流值
     QString getFlowValue = "7E51010100";
     writeData(getFlowValue, bDisp);
+
+    // 判断返回帧
+    QString data = readData(bDisp);
+    if( data=="" )
+    {
+        if(bDisp==true)
+        {
+            ui->textEdit_msg->append("无法查询电流值，无返回帧 7F510102YY.");
+        }
+        return;
+    }
+    // 去除内部所有空格，匹配返回帧协议
+    data.remove(QRegExp("\\s"));
+    if(data.left(8) == "7F510102")
+    {
+        if(bDisp==true)
+        {
+            std::string msg = "查询电流值返回帧正确 ";
+            msg.append(data.toStdString());
+            ui->textEdit_msg->append(QString::fromStdString(msg));
+        }
+    }
+    else
+    {
+        std::string msg = "查询电流值返回帧错误，返回帧应为 7F510102YY. 实际返回值 ";
+        msg.append(data.toStdString());
+        ui->textEdit_msg->append(QString::fromStdString(msg));
+        return;
+    }
+
+    // 取得后四位的电流值，实时显示在显示框
+    int value = QString2Int(data.mid(8,4));
+    ui->lineEdit_flowValue->setText(QString::number(value));
 }
 
 void MainWindow::on_btn_local_clicked()
@@ -249,9 +393,35 @@ void MainWindow::on_btn_local_clicked()
     }
 
     // 设置本地控制模式
-    ui->textEdit_send->append("\n设置本地控制模式：");
+    ui->textEdit_msg->append("\n设置本地控制模式：");
     QString localMode = "7E01030101";
     writeData(localMode);
+
+    // 判断返回帧
+    QString data = readData();
+    if(data=="")
+    {
+        ui->textEdit_msg->append("设置本地控制模式，无返回帧 7F01030101.");
+        // 开启查询定时器
+        ivGetFlowTimer.start(1000);
+        //return;
+    }
+    else
+    {
+        // 去除内部所有空格，匹配返回帧协议
+        data.remove(QRegExp("\\s"));
+        if(data == "7F01030101")
+        {
+            ui->textEdit_msg->append("设置本地控制模式返回帧正确 7F01030101.");
+        }
+        else
+        {
+            ui->textEdit_msg->append("设置本地控制模式返回帧错误, 返回帧应为 7F01030101.");
+            // 开启查询定时器
+            ivGetFlowTimer.start(1000);
+            //return;
+        }
+    }
 
     ui->btn_local->setStyleSheet("background:rgb(0,255,0)");
     ui->btn_local->setEnabled(false);
@@ -272,9 +442,35 @@ void MainWindow::on_btn_rs232_clicked()
     }
 
     // 设置RS232控制模式
-    ui->textEdit_send->append("\n设置RS232控制模式：");
+    ui->textEdit_msg->append("\n设置RS232控制模式：");
     QString RS232Mode = "7E01030100";
     writeData(RS232Mode);
+
+    // 判断返回帧
+    QString data = readData();
+    if(data=="")
+    {
+        ui->textEdit_msg->append("无法设置RS232控制模式，无返回帧 7F01030100.");
+        // 开启查询定时器
+        ivGetFlowTimer.start(1000);
+        //return;
+    }
+    else
+    {
+        // 去除内部所有空格，匹配返回帧协议
+        data.remove(QRegExp("\\s"));
+        if(data == "7F01030100")
+        {
+            ui->textEdit_msg->append("设置RS232控制模式返回帧正确 7F01030100.");
+        }
+        else
+        {
+            ui->textEdit_msg->append("设置RS232控制模式返回帧错误, 返回帧应为 7F01030100.");
+            // 开启查询定时器
+            ivGetFlowTimer.start(1000);
+            //return;
+        }
+    }
 
     ui->btn_rs232->setStyleSheet("background:rgb(0,255,0)");
     ui->btn_rs232->setEnabled(false);
@@ -301,94 +497,44 @@ void MainWindow::writeData(QString aString, bool aDisplay)
 
         if( result == -1 )
         {
-            ui->textEdit_send->append("Write " + aString + " failed!");
+            ui->textEdit_msg->append("Write " + aString + " failed!");
         }
         else
         {
-            ui->textEdit_send->append("Write " + aString + " successful.");
+            ui->textEdit_msg->append("Write " + aString + " successful.");
         }
     }
 }
 
-QString MainWindow::readData()
+QString MainWindow::readData(bool aDisplay)
 {
     QByteArray buf;
     QString str;
 
-    //if(ivSerial->waitForReadyRead(3000))
+    if(ivSerial->waitForReadyRead(3000))
     {
         buf = ivSerial->readAll();
-//        while(ivSerial->waitForReadyRead(100))
-//        {
-//            buf += ivSerial->readAll();
-//        }
+        while(ivSerial->waitForReadyRead(100))
+        {
+            buf += ivSerial->readAll();
+        }
         if (!buf.isEmpty())
         {
             str = Hex2QString(buf);
 
-            // 更新 ui recv 窗口信息
-            if( bDisp == true )
+            if(aDisplay)
             {
-                // 清空之前显示的数据后，重新显示
-                QString receive = ui->textEdit_recv->toPlainText();
-                ui->textEdit_recv->clear();
-
-                receive += QString(" " + str);
-                ui->textEdit_recv->append(receive);
-            }
-
-            str.remove(QRegExp("\\s"));
-
-            // 更新ui实时电流值信息
-            int index = str.lastIndexOf("7F510102");
-            if( index!=-1 )
-            {
-                // 取得后四位的电流值，实时显示在显示框
-                int value = QString2Int(str.mid(index+8,4));
-                ui->lineEdit_flowValue->setText(QString::number(value));
-            }
-
-            // 更新 ui send 窗口信息
-            index = str.lastIndexOf("7F01010101");
-            if( index!=-1 )
-            {
-                ui->textEdit_send->append("\n设置工作模式返回帧正确 7F01010101");
-            }
-            index = str.lastIndexOf("7F01030101");
-            if( index!=-1 )
-            {
-                ui->textEdit_send->append("\n设置本地控制模式返回帧正确 7F01030101");
-            }
-            index = str.lastIndexOf("7F01030100");
-            if( index!=-1 )
-            {
-                ui->textEdit_send->append("\n设置本地控制模式返回帧正确 7F01030100");
-            }
-            index = str.lastIndexOf("7F0401020000");
-            if( index!=-1 )
-            {
-                ui->textEdit_send->append("\n设置电流为0返回帧正确 7F0401020000");
-            }
-            index = str.lastIndexOf("7F02010101");
-            if( index!=-1 )
-            {
-                ui->textEdit_send->append("\n开启电流开关返回帧正确 7F02010101");
-            }
-            index = str.lastIndexOf("7F02010100");
-            if( index!=-1 )
-            {
-                ui->textEdit_send->append("\n开启电流开关返回帧正确 7F02010100");
-            }
-            index = str.lastIndexOf("7F040102");
-            if( index!=-1 )
-            {
-                QString vStr = str.mid(index+8,4);
-                ui->textEdit_send->append("\n设置电流返回帧正确 7F02010100" + vStr);
+                ui->textEdit_msg->append("readData: " + str);
             }
         }
     }
 
     return str;
+}
+
+void MainWindow::on_btn_clearMsg_clicked()
+{
+    ui->textEdit_msg->clear();
 }
 
 void MainWindow::on_btn_standBy_clicked()
@@ -404,18 +550,66 @@ void MainWindow::on_btn_standBy_clicked()
     }
 
     // 1. 待机模式 电流设置为0
-    ui->textEdit_send->append("\n设置待机模式 电流为0：");
+    ui->textEdit_msg->append("\n设置待机模式 电流为0：");
     QString flowValue = "7E0401020000";
     writeData(flowValue);
 
+    // 判断设置电流为0返回帧
+    QString data = readData();
+    if(data=="")
+    {
+        ui->textEdit_msg->append("无法设置电流为0，无返回帧 7F0401020000.");
+        // 开启查询定时器
+        ivGetFlowTimer.start(1000);
+        //return;
+    }
+    else
+    {
+        // 去除内部所有空格，匹配返回帧协议
+        data.remove(QRegExp("\\s"));
+        if(data == "7F0401020000")
+        {
+            ui->textEdit_msg->append("设置电流为0返回帧正确 7F0401020000.");
+        }
+        else
+        {
+            ui->textEdit_msg->append("设置电流为0返回帧错误, 返回帧应为 7F0401020000.");
+            // 开启查询定时器
+            ivGetFlowTimer.start(1000);
+            //return;
+        }
+    }
+
     // 2. 待机模式 开启电流开关
-    ui->textEdit_send->append("\n设置待机模式 开启电流开关：");
+    ui->textEdit_msg->append("\n设置待机模式 开启电流开关：");
     QString flowOn = "7E02010101";
     writeData(flowOn);
-
+	
     ui->btn_standBy->setStyleSheet("background:rgb(0,255,0)");
     ui->btn_start->setStyleSheet(tr("background-color:%1").arg(ivDefaultColor.name()));
 
+    // 判断开启电流开关返回帧
+    data = readData();
+    if(data=="")
+    {
+        ui->textEdit_msg->append("无法开启电流开关，无返回帧 7F02010101.");
+        // 开启查询定时器
+        ivGetFlowTimer.start(1000);
+        return;
+    }
+    else
+    {
+        // 去除内部所有空格，匹配返回帧协议
+        data.remove(QRegExp("\\s"));
+        if(data == "7F02010101")
+        {
+            ui->textEdit_msg->append("开启电流开关返回帧正确 7F02010101.");
+        }
+        else
+        {
+            ui->textEdit_msg->append("开启电流开关返回帧错误, 返回帧应为 7F02010101.");
+        }
+    }
 
     // 开启查询定时器
     ivGetFlowTimer.start(1000);
@@ -448,11 +642,39 @@ void MainWindow::on_btn_start_clicked()
         ivFlowValue = 0;
 
         // 打开电流
-        ui->textEdit_send->append("\n打开电流：");
+        ui->textEdit_msg->append("\n打开电流：");
         QString flowOn = "7E02010101";
         writeData(flowOn);
 
-        // 设置启动按钮文字为关闭电源，颜色为绿色
+        // 判断开启电流开关返回帧
+        QString data = readData();
+        if(data=="")
+        {
+            ui->textEdit_msg->append("无法开启电流开关，无返回帧 7F02010101.");
+            // 开启查询定时器
+            ivGetFlowTimer.start(1000);
+            //return;
+        }
+        else
+        {
+            // 去除内部所有空格，匹配返回帧协议
+            data.remove(QRegExp("\\s"));
+            if(data == "7F02010101")
+            {
+                ui->textEdit_msg->append("开启电流开关返回帧正确 7F02010101.");
+            }
+            else
+            {
+                std::string msg = "开启电流开关返回帧错误, 返回帧应为 7F02010101. 实际返回值为 ";
+                msg.append(data.toStdString());
+                ui->textEdit_msg->append(QString::fromStdString(msg));
+                // 开启查询定时器
+                ivGetFlowTimer.start(1000);
+                //return;
+            }
+        }
+
+        // 设置按钮为关闭电源
         ui->btn_start->setText("关闭电流");
         ui->btn_start->setStyleSheet("background:rgb(0,255,0)");
         ui->btn_standBy->setStyleSheet(tr("background-color:%1").arg(ivDefaultColor.name()));
@@ -481,14 +703,62 @@ void MainWindow::on_btn_start_clicked()
         ui->lineEdit_flowValue->clear();
 
         // 关闭电流
-        ui->textEdit_send->append("\n关闭电流：");
+        ui->textEdit_msg->append("\n关闭电流：");
         QString flowOn = "7E02010100";
         writeData(flowOn);
 
+        // 判断关闭电流开关返回帧
+        QString data = readData();
+        if(data=="")
+        {
+            ui->textEdit_msg->append("无法关闭电流开关，无返回帧 7F02010100.");
+            // 开启查询定时器
+            ivGetFlowTimer.start(1000);
+            //return;
+        }
+        else
+        {
+            // 去除内部所有空格，匹配返回帧协议
+            data.remove(QRegExp("\\s"));
+            if(data == "7F02010100")
+            {
+                ui->textEdit_msg->append("关闭电流开关返回帧正确 7F02010100.");
+            }
+            else
+            {
+                std::string msg = "关闭电流开关返回帧错误, 返回帧应为 7F02010100. 实际返回值为 ";
+                msg.append(data.toStdString());
+                ui->textEdit_msg->append(QString::fromStdString(msg));
+            }
+        }
+
         // 设置电流
-        ui->textEdit_send->append("\n设置电流值：0 ");
+        ui->textEdit_msg->append("\n设置电流值：0 ");
         QString flowValue = "7E0401020000";
         writeData(flowValue);
+
+        // 判断设置电流返回帧
+        data = readData();
+        if(data=="")
+        {
+            ui->textEdit_msg->append("无法设置电流，无返回帧 7F040102YY.");
+            //return;
+        }
+        else
+        {
+            // 去除内部所有空格，匹配返回帧协议
+            QString returnStr = "7F0401020000";
+            data.remove(QRegExp("\\s"));
+            if(data == returnStr)
+            {
+                ui->textEdit_msg->append("设置电流返回帧正确 " + returnStr);
+            }
+            else
+            {
+                ui->textEdit_msg->append("设置电流返回帧错误，返回帧应为 " + returnStr);
+                //return;
+            }
+        }
 
         ui->btn_start->setText("启动");
         ui->btn_start->setStyleSheet(tr("background-color:%1").arg(ivDefaultColor.name()));
@@ -519,13 +789,33 @@ void MainWindow::handleSetFlowTimeout()
     // 第一次进来打印日志
     //if( bFirstSetFlow )
     {
-        ui->textEdit_send->append("\n设置电流值： " + QString::number(ivFlowValue));
+        ui->textEdit_msg->append("\n设置电流值： " + QString::number(ivFlowValue));
         bFirstSetFlow = false;
     }
 
     // 设置电流
     QString flowValue = "7E040102" + value;
     writeData(flowValue);
+
+    // 判断设置电流返回帧
+    QString data = readData();
+    if(data=="")
+    {
+        ui->textEdit_msg->append("无法设置电流，无返回帧 7F040102YY.");
+        return;
+    }
+    // 去除内部所有空格，匹配返回帧协议
+    QString returnStr = "7F040102" + value;
+    data.remove(QRegExp("\\s"));
+    if(data == returnStr)
+    {
+        ui->textEdit_msg->append("设置电流返回帧正确 " + returnStr);
+    }
+    else
+    {
+        ui->textEdit_msg->append("设置电流返回帧错误，返回帧应为 " + returnStr);
+        return;
+    }
 }
 
 /*
@@ -630,14 +920,4 @@ static QString Hex2QString(QByteArray data)
 void MainWindow::on_comboBox_serialPort_currentIndexChanged(const QString &arg1)
 {
     ivPortName = arg1;
-}
-
-void MainWindow::on_btn_clearMsg_clicked()
-{
-    ui->textEdit_send->clear();
-}
-
-void MainWindow::on_btn_clearMsg_recv_clicked()
-{
-    ui->textEdit_recv->clear();
 }

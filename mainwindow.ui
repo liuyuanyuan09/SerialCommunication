@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>498</width>
-    <height>696</height>
+    <height>620</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -248,40 +248,14 @@
    <widget class="QPushButton" name="btn_clearMsg">
     <property name="geometry">
      <rect>
-      <x>280</x>
-      <y>630</y>
+      <x>380</x>
+      <y>550</y>
       <width>91</width>
       <height>25</height>
      </rect>
     </property>
     <property name="text">
-     <string>清空日志</string>
-    </property>
-   </widget>
-   <widget class="QTextEdit" name="textEdit_recv">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>520</y>
-      <width>451</width>
-      <height>101</height>
-     </rect>
-    </property>
-    <property name="readOnly">
-     <bool>true</bool>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_7">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>500</y>
-      <width>54</width>
-      <height>12</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>接收信息：</string>
+     <string>清空消息</string>
     </property>
    </widget>
    <widget class="QGroupBox" name="groupBox_flow_2">
@@ -344,13 +318,13 @@
      </property>
     </widget>
    </widget>
-   <widget class="QTextEdit" name="textEdit_send">
+   <widget class="QTextEdit" name="textEdit_msg">
     <property name="geometry">
      <rect>
       <x>20</x>
       <y>370</y>
       <width>451</width>
-      <height>121</height>
+      <height>161</height>
      </rect>
     </property>
     <property name="readOnly">
@@ -367,30 +341,14 @@
      </rect>
     </property>
     <property name="text">
-     <string>操作日志：</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btn_clearMsg_recv">
-    <property name="geometry">
-     <rect>
-      <x>380</x>
-      <y>630</y>
-      <width>91</width>
-      <height>25</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>清空接收消息</string>
+     <string>消息日志：</string>
     </property>
    </widget>
    <zorder>groupBox_flow_2</zorder>
    <zorder>groupBox</zorder>
    <zorder>btn_clearMsg</zorder>
-   <zorder>textEdit_recv</zorder>
-   <zorder>label_7</zorder>
-   <zorder>textEdit_send</zorder>
+   <zorder>textEdit_msg</zorder>
    <zorder>label_8</zorder>
-   <zorder>btn_clearMsg_recv</zorder>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">

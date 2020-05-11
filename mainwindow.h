@@ -19,7 +19,7 @@ public:
 
 private slots:
 
-    QString readData();
+    QString readData(bool disp=true);
 
     void on_btn_openPort_clicked();
 
@@ -40,8 +40,6 @@ private slots:
     void on_btn_clearMsg_clicked();
 
     void on_comboBox_serialPort_currentIndexChanged(const QString &arg1);
-
-    void on_btn_clearMsg_recv_clicked();
 
 private:
 
